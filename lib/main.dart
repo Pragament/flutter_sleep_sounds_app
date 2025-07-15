@@ -16,6 +16,7 @@ class SleepSoundsApp extends StatelessWidget {
     return MaterialApp(
       title: 'Relax Melodies',
       theme: ThemeData.dark(),
+      debugShowCheckedModeBanner: false,
       home: SleepSoundsHome(),
     );
   }
@@ -43,8 +44,12 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
 
   void _playSound(String filePath) async {
     try {
-      await _audioPlayer.stop();
+      await _audioPlayer.stop(); // Stop any previous audio
       await _audioPlayer.setAsset(filePath);
+
+      // 🔁 This enables looping
+      _audioPlayer.setLoopMode(LoopMode.one);
+
       _audioPlayer.setVolume(volume);
       _audioPlayer.play();
       setState(() => isPlaying = true);
@@ -52,7 +57,6 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
       print("Error: $e");
     }
   }
-
   void _pauseSound() {
     _audioPlayer.pause();
     setState(() => isPlaying = false);
@@ -84,12 +88,15 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
       appBar: AppBar(title: Text('Relax Melodies')),
       body: Column(
         children: [
+          // ✅ Main content with sound grid
           Expanded(
             child: SoundGrid(
               sounds: sounds,
               playSound: _playSound,
             ),
           ),
+
+          // ✅ Volume control slider
           VolumeControl(
             volume: volume,
             onVolumeChanged: (val) {
@@ -99,12 +106,16 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
               });
             },
           ),
+
+          // ✅ Play/Pause/Stop buttons
           PlaybackControls(
             isPlaying: isPlaying,
             onPlay: () => _playSound(sounds[0]['file']!),
             onPause: _pauseSound,
             onStop: _stopSound,
           ),
+
+          // ✅ Sleep timer
           TimerControls(setTimer: _setTimer),
         ],
       ),
