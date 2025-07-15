@@ -31,6 +31,7 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool isPlaying = false;
   Timer? _timer;
+  Duration? _remainingTime;
   double volume = 1.0;
 
   final List<Map<String, String>> sounds = [
@@ -44,19 +45,17 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
 
   void _playSound(String filePath) async {
     try {
-      await _audioPlayer.stop(); // Stop any previous audio
+      await _audioPlayer.stop();
       await _audioPlayer.setAsset(filePath);
-
-      // 🔁 This enables looping
-      _audioPlayer.setLoopMode(LoopMode.one);
-
+      await _audioPlayer.setLoopMode(LoopMode.one); // loop continuously
       _audioPlayer.setVolume(volume);
-      _audioPlayer.play();
+      await _audioPlayer.play();
       setState(() => isPlaying = true);
     } catch (e) {
       print("Error: $e");
     }
   }
+
   void _pauseSound() {
     _audioPlayer.pause();
     setState(() => isPlaying = false);
@@ -64,15 +63,35 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
 
   void _stopSound() {
     _audioPlayer.stop();
-    setState(() => isPlaying = false);
+    setState(() {
+      isPlaying = false;
+      _remainingTime = null;
+    });
     _timer?.cancel();
   }
 
   void _setTimer(Duration duration) {
     _timer?.cancel();
-    _timer = Timer(duration, () {
-      _stopSound();
+    _remainingTime = duration;
+
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (_remainingTime == null || _remainingTime!.inSeconds <= 1) {
+        _stopSound();
+        timer.cancel();
+      } else {
+        setState(() {
+          _remainingTime = _remainingTime! - Duration(seconds: 1);
+        });
+      }
     });
+  }
+
+  String _formatDuration(Duration? duration) {
+    if (duration == null) return '';
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
   }
 
   @override
@@ -88,7 +107,6 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
       appBar: AppBar(title: Text('Relax Melodies')),
       body: Column(
         children: [
-          // ✅ Main content with sound grid
           Expanded(
             child: SoundGrid(
               sounds: sounds,
@@ -96,7 +114,15 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
             ),
           ),
 
-          // ✅ Volume control slider
+          if (_remainingTime != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Time Left: ${_formatDuration(_remainingTime)}',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+
           VolumeControl(
             volume: volume,
             onVolumeChanged: (val) {
@@ -107,7 +133,6 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
             },
           ),
 
-          // ✅ Play/Pause/Stop buttons
           PlaybackControls(
             isPlaying: isPlaying,
             onPlay: () => _playSound(sounds[0]['file']!),
@@ -115,7 +140,6 @@ class _SleepSoundsHomeState extends State<SleepSoundsHome> {
             onStop: _stopSound,
           ),
 
-          // ✅ Sleep timer
           TimerControls(setTimer: _setTimer),
         ],
       ),
