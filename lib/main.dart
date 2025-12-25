@@ -9,6 +9,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'screens/animal_sounds.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
@@ -76,28 +78,30 @@ class _SleepSoundsHomeState extends ConsumerState<SleepSoundsHome> {
     return Column(
       children: [
         Expanded(
-          child: GridView.count(
-            crossAxisCount: 2,
-            children: sounds.map((sound) {
-              return GestureDetector(
-                onTap: () => _playAssetSound(sounds.indexOf(sound)),
-                child: Card(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.asset(sound['image']!, fit: BoxFit.cover),
-                      Container(
-                        color: Colors.black.withOpacity(0.3),
-                        child: Center(
-                          child: Text(sound['title']!, style: TextStyle(fontSize: 18)),
+          child: LayoutBuilder(builder: (context, constraints) {
+            return GridView.count(
+              crossAxisCount: constraints.maxWidth > 600 ? 4 : 2,
+              children: sounds.map((sound) {
+                return GestureDetector(
+                  onTap: () => _playAssetSound(sounds.indexOf(sound)),
+                  child: Card(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.asset(sound['image']!, fit: BoxFit.cover),
+                        Container(
+                          color: Colors.black.withOpacity(0.3),
+                          child: Center(
+                            child: Text(sound['title']!, style: TextStyle(fontSize: 18)),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
+                );
+              }).toList(),
+            );
+          },),
         ),
         CommonBottomControls(),
       ],
@@ -187,7 +191,7 @@ class _SleepSoundsHomeState extends ConsumerState<SleepSoundsHome> {
 
   @override
   Widget build(BuildContext context) {
-    final screens = [_buildHome(), _buildFind(), _buildLibrary()];
+    final screens = [_buildHome(), _buildFind(), _buildLibrary(), const AnimalSoundsPage()];
 
     return Scaffold(
       appBar: AppBar(title: Text('Relax Melodies')),
@@ -197,9 +201,11 @@ class _SleepSoundsHomeState extends ConsumerState<SleepSoundsHome> {
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Find'),
           BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Library'),
+          BottomNavigationBarItem(icon: Icon(Icons.pets), label: 'Animal Sounds'),
         ],
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
       ),
     );
   }

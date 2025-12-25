@@ -62,6 +62,11 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   assets:
+    - assets/
+    - assets/birds/
+    - assets/pet_animals/
+    - assets/water_animals/
+    - assets/wild_animals/
     - assets/ocean_waves.jpeg
     - assets/ocean_waves.mp3
     - assets/peaceful_night.mp3
