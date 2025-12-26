@@ -66,7 +66,6 @@ flutter:
     - assets/birds/
     - assets/pet_animals/
     - assets/water_animals/
-    - assets/wild_animals/
     - assets/ocean_waves.jpeg
     - assets/ocean_waves.mp3
     - assets/peaceful_night.mp3
@@ -119,3 +118,4 @@ dependency_overrides:
     git:
       url: https://github.com/miguelpruivo/flutter_file_picker.git
       ref: master
+
