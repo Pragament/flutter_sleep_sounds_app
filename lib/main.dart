@@ -8,18 +8,35 @@ import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 
+import 'audio_handler.dart';
 import 'screens/animal_sounds.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await Hive.openBox<String>('mp3_files');
-  runApp(ProviderScope(child: SleepSoundsApp()));
+
+  runApp(
+    ProviderScope(
+      child: SleepSoundsApp(),
+    ),
+  );
 }
 
+final audioHandlerProvider = FutureProvider<AudioHandler>((ref) async {
+  return await AudioService.init(
+    builder: () => MyAudioHandler(),
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.example.sleep_sounds_fixed.audio',
+      androidNotificationChannelName: 'Sleep Sounds',
+      androidNotificationOngoing: true,
+    ),
+  );
+});
 
-final audioPlayerProvider = Provider<AudioPlayer>((ref) => AudioPlayer());
 final playlistProvider = StateProvider<List<String>>((ref) => []);
 final currentIndexProvider = StateProvider<int>((ref) => -1);
 final isPlayingProvider = StateProvider<bool>((ref) => false);
@@ -60,16 +77,17 @@ class _SleepSoundsHomeState extends ConsumerState<SleepSoundsHome> {
   }
 
   Future<void> _playAssetSound(int index) async {
-    final player = ref.read(audioPlayerProvider);
     final playlistNotifier = ref.read(playlistProvider.notifier);
     final indexNotifier = ref.read(currentIndexProvider.notifier);
 
     playlistNotifier.state = sounds.map((e) => e['file']!).toList();
     indexNotifier.state = index;
 
-    await player.setAsset(sounds[index]['file']!);
-    await player.setLoopMode(LoopMode.one);
-    await player.play();
+    final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+    await audioHandler.setPlaylist(
+      sounds.map((e) => e['file']!).toList(),
+      index,
+    );
 
     ref.read(isPlayingProvider.notifier).state = true;
   }
@@ -141,17 +159,13 @@ class _SleepSoundsHomeState extends ConsumerState<SleepSoundsHome> {
                   ],
                 ),
                 onTap: () async {
-                  final player = ref.read(audioPlayerProvider);
                   final playlistNotifier = ref.read(playlistProvider.notifier);
                   final indexNotifier = ref.read(currentIndexProvider.notifier);
-
                   playlistNotifier.state = mp3List;
                   indexNotifier.state = index;
 
-                  await player.setFilePath(path);
-                  await player.setLoopMode(LoopMode.one);
-                  await player.play();
-
+                  final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+                  await audioHandler.setPlaylist(mp3List, index);
                   ref.read(isPlayingProvider.notifier).state = true;
                 },
               );
@@ -211,6 +225,8 @@ class _SleepSoundsHomeState extends ConsumerState<SleepSoundsHome> {
   }
 }
 
+
+
 class CommonBottomControls extends ConsumerStatefulWidget {
   const CommonBottomControls({Key? key}) : super(key: key);
 
@@ -221,22 +237,10 @@ class CommonBottomControls extends ConsumerStatefulWidget {
 class _CommonBottomControlsState extends ConsumerState<CommonBottomControls> {
   Timer? _timer;
   Duration? _remainingTime;
-  StreamSubscription<PlayerState>? _playerSubscription;
 
   @override
   void initState() {
     super.initState();
-
-    final player = ref.read(audioPlayerProvider);
-
-  
-    _playerSubscription = player.playerStateStream.listen((state) {
-      final isPlaying = state.playing && state.processingState != ProcessingState.completed;
-
-      ref.read(isPlayingProvider.notifier).state = isPlaying;
-
-      setState(() {});
-    });
   }
 
   void _setTimer(Duration duration) {
@@ -245,7 +249,8 @@ class _CommonBottomControlsState extends ConsumerState<CommonBottomControls> {
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       if (_remainingTime == null || _remainingTime!.inSeconds <= 1) {
-        await ref.read(audioPlayerProvider).stop();
+        final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+        await audioHandler.stop();
         ref.read(isPlayingProvider.notifier).state = false;
         ref.read(currentIndexProvider.notifier).state = -1;
         timer.cancel();
@@ -266,38 +271,15 @@ class _CommonBottomControlsState extends ConsumerState<CommonBottomControls> {
     return '$minutes:$seconds';
   }
 
-  Future<void> playAtIndex(int index) async {
-    final player = ref.read(audioPlayerProvider);
-    final playlist = ref.read(playlistProvider);
-
-    if (playlist.isEmpty) return;
-
-    final file = playlist[index];
-    try {
-      if (file.startsWith('assets/')) {
-        await player.setAsset(file);
-      } else {
-        await player.setFilePath(file);
-      }
-      await player.setLoopMode(LoopMode.one);
-      await player.play();
-
-      ref.read(currentIndexProvider.notifier).state = index;
-    } catch (e) {
-      print(e);
-    }
-  }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _playerSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final player = ref.watch(audioPlayerProvider);
     final playlist = ref.watch(playlistProvider);
     final currentIndex = ref.watch(currentIndexProvider);
     final isPlaying = ref.watch(isPlayingProvider);
@@ -323,50 +305,45 @@ class _CommonBottomControlsState extends ConsumerState<CommonBottomControls> {
               onPressed: () async {
                 if (playlist.isNotEmpty) {
                   final newIndex = Random().nextInt(playlist.length);
-                  await playAtIndex(newIndex);
+                  final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+                  await audioHandler.setPlaylist(playlist, newIndex);
+                  ref.read(currentIndexProvider.notifier).state = newIndex;
+                  ref.read(isPlayingProvider.notifier).state = true;
                 }
               },
             ),
             IconButton(
               icon: const Icon(Icons.skip_previous),
               onPressed: () async {
-                if (playlist.isNotEmpty) {
-                  final newIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-                  await playAtIndex(newIndex);
-                }
+                final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+                await audioHandler.skipToPrevious();
               },
             ),
             IconButton(
               icon: Icon(playPauseIcon),
               iconSize: 36,
               onPressed: () async {
+                final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
                 if (!isSongSelected) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please select a song to play.')));
+                    const SnackBar(content: Text('Please select a song to play.')),
+                  );
                   return;
                 }
                 if (isPlaying) {
-                  await player.pause();
-                  ref.read(isPlayingProvider.notifier).state = false; 
+                  await audioHandler.pause();
+                  ref.read(isPlayingProvider.notifier).state = false;
                 } else {
-                  if (player.processingState == ProcessingState.completed ||
-                      player.processingState == ProcessingState.idle) {
-                    await playAtIndex(currentIndex);
-                  } else {
-                    await player.play();
-                    ref.read(isPlayingProvider.notifier).state = true; 
-                  }
+                  await audioHandler.play();
+                  ref.read(isPlayingProvider.notifier).state = true;
                 }
-
               },
             ),
             IconButton(
               icon: const Icon(Icons.skip_next),
               onPressed: () async {
-                if (playlist.isNotEmpty) {
-                  final newIndex = (currentIndex + 1) % playlist.length;
-                  await playAtIndex(newIndex);
-                }
+                final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+                await audioHandler.skipToNext();
               },
             ),
             IconButton(
