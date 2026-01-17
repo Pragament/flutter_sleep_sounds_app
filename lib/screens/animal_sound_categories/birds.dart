@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
+import '../../audio_handler.dart';
 import '../../main.dart';
 
 class BirdsPage extends ConsumerWidget {
@@ -12,16 +12,18 @@ class BirdsPage extends ConsumerWidget {
   ];
 
   Future<void> _playAssetSound(WidgetRef ref, int index) async {
-    final player = ref.read(audioPlayerProvider);
+    final audioHandler = await ref.read(audioHandlerProvider.future) as MyAudioHandler;
+
     final playlistNotifier = ref.read(playlistProvider.notifier);
     final indexNotifier = ref.read(currentIndexProvider.notifier);
 
-    playlistNotifier.state = birdSounds.map((e) => e['file']!).toList();
+    final playlist = birdSounds.map((e) => e['file']!).toList();
+
+    playlistNotifier.state = playlist;
     indexNotifier.state = index;
 
-    await player.setAsset(birdSounds[index]['file']!);
-    await player.setLoopMode(LoopMode.one);
-    await player.play();
+    await audioHandler.setPlaylist(playlist, index);
+    await audioHandler.play();
 
     ref.read(isPlayingProvider.notifier).state = true;
   }
